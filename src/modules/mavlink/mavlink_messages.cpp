@@ -4375,6 +4375,73 @@ protected:
 	}
 };
 
+class MavlinkStreamGpsGlobalOrigin : public MavlinkStream
+{
+public:
+	const char *get_name() const override
+	{
+		return MavlinkStreamGpsGlobalOrigin::get_name_static();
+	}
+
+	static constexpr const char *get_name_static()
+	{
+		return "GPS_GLOBAL_ORIGIN";
+	}
+
+	static constexpr uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_GPS_GLOBAL_ORIGIN;
+	}
+
+	uint16_t get_id() override
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamGpsGlobalOrigin(mavlink);
+	}
+
+	unsigned get_size() override
+	{
+		return _vehicle_local_position_sub.advertised() ?
+		       (MAVLINK_MSG_ID_GPS_GLOBAL_ORIGIN_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
+	}
+
+private:
+	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
+
+	/* do not allow top copying this class */
+	MavlinkStreamGpsGlobalOrigin(MavlinkStreamGpsGlobalOrigin &) = delete;
+	MavlinkStreamGpsGlobalOrigin &operator = (const MavlinkStreamGpsGlobalOrigin &) = delete;
+
+protected:
+	explicit MavlinkStreamGpsGlobalOrigin(Mavlink *mavlink) : MavlinkStream(mavlink)
+	{}
+
+	bool send() override
+	{
+		vehicle_local_position_s vehicle_local_position;
+
+		if (_vehicle_local_position_sub.update(&vehicle_local_position)) {
+			mavlink_gps_global_origin_t msg{};
+
+			if (vehicle_local_position.ref_timestamp > 0) {
+				msg.latitude = static_cast<int32_t>(vehicle_local_position.ref_lat * 1e7); // double degree -> int32 degreeE7
+				msg.longitude = static_cast<int32_t>(vehicle_local_position.ref_lon * 1e7); // double degree -> int32 degreeE7
+				msg.altitude = static_cast<int32_t>(vehicle_local_position.ref_alt * 1e3f); // float m -> int32 mm
+				msg.time_usec = vehicle_local_position.timestamp; // int64 time since system boot
+			}
+
+			mavlink_msg_gps_global_origin_send_struct(_mavlink->get_channel(), &msg);
+			return true;
+		}
+
+		return false;
+	}
+};
+
 static const StreamListItem streams_list[] = {
 	create_stream_list_item<MavlinkStreamHeartbeat>(),
 	create_stream_list_item<MavlinkStreamStatustext>(),
@@ -4392,6 +4459,7 @@ static const StreamListItem streams_list[] = {
 	create_stream_list_item<MavlinkStreamAttitude>(),
 	create_stream_list_item<MavlinkStreamAttitudeQuaternion>(),
 	create_stream_list_item<MavlinkStreamVFRHUD>(),
+	create_stream_list_item<MavlinkStreamGpsGlobalOrigin>(),
 	create_stream_list_item<MavlinkStreamGPSRawInt>(),
 	create_stream_list_item<MavlinkStreamGPS2Raw>(),
 	create_stream_list_item<MavlinkStreamSystemTime>(),
